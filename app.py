@@ -1,4 +1,10 @@
 import streamlit as st
+import re
+import streamlit as st
+import re
+import pandas as pd
+from fpdf import FPDF
+from datetime import datetime
 
 # Configuración simple
 st.title("🛒 Lista de Compras Mercadito")
@@ -8,14 +14,22 @@ st.title("🛒 Lista de Compras Mercadito")
 if 'productos' not in st.session_state:
     st.session_state.productos = []
 
-
 def convertir_cantidad(texto):
     try:
-        texto = str(texto).replace(',', '.')
+        texto = str(texto).lower().replace(',', '.')
+        
+        # Caso fracción (ej: 1/4, 1 / 2)
         if '/' in texto:
-            num, den = texto.split('/')
-            return float(num) / float(den)
-        return float(texto)
+            match = re.search(r'(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)', texto)
+            if match:
+                return float(match.group(1)) / float(match.group(2))
+        
+        # Caso número simple (ej: 3, 2.5, 3 kilos)
+        match = re.search(r'\d+(?:\.\d+)?', texto)
+        if match:
+            return float(match.group(0))
+            
+        return None
     except:
         return None
 
@@ -23,6 +37,50 @@ def limpiar_formulario():
     st.session_state.nombre_input = ""
     st.session_state.cantidad_input = "1"
     st.session_state.costo_input = 0.0
+
+def create_pdf(productos, total):
+    class PDF(FPDF):
+        def header(self):
+            self.set_font('Arial', 'B', 16)
+            self.cell(0, 10, 'Lista de Compras Mercadito', 0, 1, 'C')
+            self.set_font('Arial', '', 10)
+            self.cell(0, 10, f'Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}', 0, 1, 'C')
+            self.ln(5)
+
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    # Encabezados de tabla
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(10, 10, "No.", 1, 0, 'C')
+    pdf.cell(70, 10, "Producto", 1)
+    pdf.cell(40, 10, "Cant.", 1)
+    pdf.cell(30, 10, "Precio", 1)
+    pdf.cell(40, 10, "SubTotal", 1)
+    pdf.ln()
+
+    # Datos
+    pdf.set_font("Arial", size=12)
+    for i, p in enumerate(productos, 1):
+        # Asegurar caracteres latinos
+        nombre = p['nombre'].encode('latin-1', 'replace').decode('latin-1')
+        cant = p.get('cantidad_texto', str(p['cantidad'])).encode('latin-1', 'replace').decode('latin-1')
+        
+        pdf.cell(10, 10, str(i), 1, 0, 'C')
+        pdf.cell(70, 10, nombre, 1)
+        pdf.cell(40, 10, cant, 1)
+        pdf.cell(30, 10, f"S/. {p['costo']:.2f}", 1)
+        pdf.cell(40, 10, f"S/. {p['subtotal']:.2f}", 1)
+        pdf.ln()
+
+    # Total
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(150, 10, "TOTAL A PAGAR:", 0, 0, 'R')
+    pdf.cell(40, 10, f"S/. {total:.2f}", 0, 1)
+
+    return pdf.output(dest='S').encode('latin-1')
 
 # --- FORMULARIO SIMPLE PARA AGREGAR ---
 st.subheader("➕ Agregar Producto")
@@ -38,7 +96,7 @@ with col2:
         
     cantidad_txt = st.text_input("Cantidad (ej: 1, 1/4, 2.5)", value="1", key="cantidad_input")
 with col3:
-    costo = st.number_input("Costo unitario", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_input")
+    costo = st.number_input("Precio Unitario", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_input")
 
 col_btn1, col_btn2, _ = st.columns([2, 2, 5])
 with col_btn1:
@@ -62,6 +120,7 @@ if agregar:
             st.session_state.productos.append({
                 'nombre': nombre,
                 'cantidad': cant_val,
+                'cantidad_texto': cantidad_txt,
                 'costo': costo,
                 'subtotal': subtotal
             })
@@ -75,40 +134,70 @@ if agregar:
 st.subheader("📋 Tu Lista de Compras")
 
 if st.session_state.productos:
-    # Mostrar cada producto
-    total_general = 0
-
-    # Encabezados de tabla
-    h1, h2, h3, h4, h5 = st.columns([2, 1, 1, 1, 0.5])
-    h1.write("**Producto**")
-    h2.write("**Cant.**")
-    h3.write("**Precio**")
-    h4.write("**SubT**")
-    h5.write("") # Espacio para botón borrar
-
-    for i, producto in enumerate(st.session_state.productos):
-        col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 0.5])
-        
-        col1.write(producto['nombre'])
-        col2.write(f"{producto['cantidad']:.3f}".rstrip('0').rstrip('.')) # Muestra decimales solo si necesarios
-        col3.write(f"S/. {producto['costo']:.2f}")
-        col4.write(f"**S/. {producto['subtotal']:.2f}**")
-        
-        if col5.button("❌", key=f"eliminar_{i}"):
-            st.session_state.productos.pop(i)
-            st.rerun()
-        
-        total_general += producto['subtotal']
+    # --- MOSTRAR COMO TABLA (DataFrame) ---
+    # Convertir a DataFrame para visualización tipo tabla
+    data_display = []
+    for p in st.session_state.productos:
+        cant_str = p.get('cantidad_texto', str(p['cantidad']))
+        # Asegurarnos de que el texto de cantidad sea lo que se muestra
+        data_display.append({
+            "Producto": p['nombre'],
+            "Cant.": cant_str,
+            "PreUni": p['costo'],
+            "SubTotal": p['subtotal'],
+            "Eliminar": False
+        })
     
+    df = pd.DataFrame(data_display)
+    # Ajustar índice para comenzar en 1
+    df.index = range(1, len(df) + 1)
+
+    column_config = {
+        # "Nro" se maneja automáticamente pon el índice del DataFrame
+        "Producto": st.column_config.TextColumn("Producto", width="medium"),
+        "Cant.": st.column_config.TextColumn("Cant.", width="small"),
+        "PreUni": st.column_config.NumberColumn("PreUni", format="S/. %.2f", width="small"),
+        "SubTotal": st.column_config.NumberColumn("SubT.", format="S/. %.2f", width="small"),
+        "Eliminar": st.column_config.CheckboxColumn("🗑️", width="small")
+    }
+
+    # Mostrar tabla editable
+    edited_df = st.data_editor(
+        df,
+        column_config=column_config,
+        hide_index=False,
+        use_container_width=True,
+        key="editor_lista"
+    )
+
+    # Calcular y mostrar total
+    total_general = sum(p['subtotal'] for p in st.session_state.productos)
+    
+    col_total1, col_total2 = st.columns([3, 1])
+    with col_total1:
+        # Botón para eliminar seleccionados (procesar cambios del editor)
+        filas_a_eliminar = edited_df[edited_df["Eliminar"] == True].index.tolist()
+        if filas_a_eliminar:
+            if st.button(f"🗑️ Eliminar ({len(filas_a_eliminar)}) seleccionados"):
+                # Eliminar items (desde el último para no afectar indices al borrar)
+                for i in sorted(filas_a_eliminar, reverse=True):
+                    st.session_state.productos.pop(i)
+                st.rerun()
+
+    with col_total2:
+        st.markdown(f"### Total: S/. {total_general:.2f}")
+
+    # Botón PDF
+    pdf_bytes = create_pdf(st.session_state.productos, total_general)
+    st.download_button(
+        label="📄 Descargar PDF",
+        data=pdf_bytes,
+        file_name=f"lista_compras_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+        mime="application/pdf"
+    )
+
     # Línea separadora
     st.markdown("---")
-    
-    # Mostrar total
-    col_total1, col_total2 = st.columns([4, 1])
-    with col_total1:
-        st.write("**TOTAL A PAGAR:**")
-    with col_total2:
-        st.write(f"**S/. {total_general:.2f}**")
     
     # Botón para limpiar todo
     if st.button("🗑️ Limpiar toda la lista"):
