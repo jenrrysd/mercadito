@@ -71,7 +71,6 @@ if agregar:
         st.warning("⚠️ Escribe el nombre del producto")
 
 
-
 # --- MOSTRAR LISTA ACTUAL ---
 st.subheader("📋 Tu Lista de Compras")
 
@@ -134,4 +133,3 @@ Correo: dextre1481@gmail.com\n
 Pagina web: https://dextre.xyz\n
 GitHub: https://github.com/jenrrysd\n
 """)
-
