@@ -65,11 +65,8 @@ if agregar:
                 'costo': costo,
                 'subtotal': subtotal
             })
-            st.success(f"✅ {nombre} agregado ({cant_val:.3f})")
+            st.success(f"✅ {nombre} agregados")
 
-        # st.session_state.nombre_input = ""
-        # st.session_state.cantidad_input = 1
-        # st.session_state.costo_input = 0.0  
     else:
         st.warning("⚠️ Escribe el nombre del producto")
 
@@ -81,22 +78,26 @@ st.subheader("📋 Tu Lista de Compras")
 if st.session_state.productos:
     # Mostrar cada producto
     total_general = 0
-    
+
+    # Encabezados de tabla
+    h1, h2, h3, h4, h5 = st.columns([2, 1, 1, 1, 0.5])
+    h1.write("**Producto**")
+    h2.write("**Cant.**")
+    h3.write("**Precio**")
+    h4.write("**SubT**")
+    h5.write("") # Espacio para botón borrar
+
     for i, producto in enumerate(st.session_state.productos):
-        col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 1])
+        col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 0.5])
         
-        with col1:
-            st.write(f"**{producto['nombre']}**")
-        with col2:
-            st.write(f"{producto['cantidad']:.2f}")
-        with col3:
-            st.write(f"${producto['costo']:.2f}")
-        with col4:
-            st.write(f"${producto['subtotal']:.2f}")
-        with col5:
-            if st.button("❌", key=f"eliminar_{i}"):
-                st.session_state.productos.pop(i)
-                st.rerun()
+        col1.write(producto['nombre'])
+        col2.write(f"{producto['cantidad']:.3f}".rstrip('0').rstrip('.')) # Muestra decimales solo si necesarios
+        col3.write(f"S/. {producto['costo']:.2f}")
+        col4.write(f"**S/. {producto['subtotal']:.2f}**")
+        
+        if col5.button("❌", key=f"eliminar_{i}"):
+            st.session_state.productos.pop(i)
+            st.rerun()
         
         total_general += producto['subtotal']
     
@@ -108,7 +109,7 @@ if st.session_state.productos:
     with col_total1:
         st.write("**TOTAL A PAGAR:**")
     with col_total2:
-        st.write(f"**${total_general:.2f}**")
+        st.write(f"**S/. {total_general:.2f}**")
     
     # Botón para limpiar todo
     if st.button("🗑️ Limpiar toda la lista"):
