@@ -5,6 +5,7 @@ import re
 import pandas as pd
 from fpdf import FPDF
 from datetime import datetime
+import pytz
 
 # Configuración simple
 st.title("🛒 Lista de Compras Mercadito")
@@ -36,7 +37,7 @@ def convertir_cantidad(texto):
 def limpiar_formulario():
     st.session_state.nombre_input = ""
     st.session_state.cantidad_input = "1"
-    st.session_state.costo_input = 0.0
+    st.session_state.costo_input = None
 
 def create_pdf(productos, total):
     class PDF(FPDF):
@@ -44,7 +45,8 @@ def create_pdf(productos, total):
             self.set_font('Arial', 'B', 16)
             self.cell(0, 10, 'Lista de Compras Mercadito', 0, 1, 'C')
             self.set_font('Arial', '', 10)
-            self.cell(0, 10, f'Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}', 0, 1, 'C')
+            peru_time = datetime.now(pytz.timezone('America/Lima'))
+            self.cell(0, 10, f'Fecha: {peru_time.strftime("%d/%m/%Y %H:%M:%S")}', 0, 1, 'C')
             self.ln(5)
 
     pdf = PDF()
@@ -80,7 +82,11 @@ def create_pdf(productos, total):
     pdf.cell(150, 10, "TOTAL A PAGAR:", 0, 0, 'R')
     pdf.cell(40, 10, f"S/. {total:.2f}", 0, 1)
 
-    return pdf.output(dest='S').encode('latin-1')
+    # Validar si output devuelve bytes (fpdf2) o string (fpdf)
+    salida = pdf.output(dest='S')
+    if isinstance(salida, str):
+        return salida.encode('latin-1')
+    return bytes(salida)
 
 # --- FORMULARIO SIMPLE PARA AGREGAR ---
 st.subheader("➕ Agregar Producto")
@@ -96,7 +102,7 @@ with col2:
         
     cantidad_txt = st.text_input("Cantidad (ej: 1, 1/4, 2.5)", value="1", key="cantidad_input")
 with col3:
-    costo = st.number_input("Precio Unitario", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="costo_input")
+    costo = st.number_input("Precio Unitario", min_value=0.0, value=None, step=0.01, format="%.2f", key="costo_input")
 
 col_btn1, col_btn2, _ = st.columns([2, 2, 5])
 with col_btn1:
@@ -107,7 +113,7 @@ with col_btn2:
 
 # Botón para agregar
 if agregar:
-    if nombre:
+    if nombre and costo is not None:
         cant_val = convertir_cantidad(cantidad_txt)
         
         if cant_val is None or cant_val <= 0:
@@ -127,7 +133,10 @@ if agregar:
             st.success(f"✅ {nombre} agregados")
 
     else:
-        st.warning("⚠️ Escribe el nombre del producto")
+        if not nombre:
+            st.warning("⚠️ Escribe el nombre del producto")
+        elif costo is None:
+            st.warning("⚠️ Ingresa el precio unitario")
 
 
 # --- MOSTRAR LISTA ACTUAL ---
@@ -192,7 +201,7 @@ if st.session_state.productos:
     st.download_button(
         label="📄 Descargar PDF",
         data=pdf_bytes,
-        file_name=f"lista_compras_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+        file_name=f"lista_compras_{datetime.now(pytz.timezone('America/Lima')).strftime('%Y%m%d_%H%M%S')}.pdf",
         mime="application/pdf"
     )
 
@@ -212,10 +221,10 @@ st.markdown("---")
 st.caption("""
 **Instrucciones:**
 1. Escribe el nombre del producto
-2. Pon la cantidad (puedes usar 1, 1.5 o fracciones como un 1/4)
-3. Pon el costo por unidad (Kilo)
+2. Pon la cantidad (ejem: 1 kilo, 1/2 pollo, 1/4 pollo, 1/8 pollo)
+3. Pon el costo por unidad del producto
 4. Haz clic en 'Agregar a la lista'
-5. Usa ❌ para eliminar un producto
+5. Usa ❌ para eliminar un producto de la lista
 
 Creado por: Jenrry Soto Dextre\n
 Correo: dextre1481@gmail.com\n
