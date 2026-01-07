@@ -1,11 +1,15 @@
 import streamlit as st
 import re
-import streamlit as st
-import re
 import pandas as pd
 from fpdf import FPDF
 from datetime import datetime
 import pytz
+
+# Configuración de página (Favicon y Título)
+st.set_page_config(
+    page_title="Mercadito",
+    page_icon="🛒"
+)
 
 # Configuración simple
 st.title("🛒 Lista de Compras Mercadito")
